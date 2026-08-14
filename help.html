@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style type="text/css">
+      body {
+        font-family: Arial, serif;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Quick Start</h2>
+    <ol>
+      <li>
+        Choose <strong>Configure API Settings</strong> and enter your
+        Canvas Instance and your Access Token.
+      </li>
+      <li>
+        Choose <strong>Specify Course</strong> and put in the Canvas
+        Course ID for the course to analyze. 
+        This will automatically run <strong>Load Due Dates</strong> so
+        you can skip the next stop.
+      </li>
+      <li>
+        Choose <strong>Load Due Dates</strong> to download all of the
+        due dates from Canvas. Note that this will erase any existing data.
+      </li>
+      <li>
+        Modify the dates. If you put dates without times into the <em>Due</em>
+        or <em>Available Until</em> fields, it will set them to the end of the day.
+      </li>
+      <li>
+        Choose <strong>Save Due Dates</strong> to save your changes to
+        Canvas.
+      </li>
+    </ol>
+    <p>
+      If your times aren't correct, it may be a timezone issue. The spreadsheet's timezone settings are found
+      under the <strong>File > Spreadsheet Settings</strong> menu item and should be set before you download the due dates.
+    </p>
+    <p>
+      The <strong>Hide Dates</strong> menu item will hide the times, leaving just the dates, for any
+      dates at the start or end of the day. If the time is in the middle of the day, then it will continue
+      to show the time. This is cosmetic and only affects how the date is displayed,
+      not the date itself.
+    </p>
+    <p>
+      The <strong>Show Dates</strong> menu item will show the time for all dates. This will allow you to
+      confirm the times. It will also allow you to do a find and replace on the times.
+    </p>
+    <p>
+      The <strong>Due at End of Minute</strong> menu item will adjust times for the due date or available until date
+      so to be the end of the minute rather than the start of the minute. This only changes them in the spreadsheet; you will
+      still need to save the changes to Canvas before they take affect.
+    </p>
+    <h2>Additional Information</h2>
+    <p>
+      For more information, visit the <a href="https://github.com/jamesjonesmath/canvancement/tree/master/google-sheets/due-dates">Canvancement</a>
+      website or the <a href="https://community.canvaslms.com/docs/DOC-6739">Canvas Community</a>.
+    </p>
+  </body>
+</html>
