@@ -1,6 +1,7 @@
 /**
 * @fileoverview This Google Sheets script will provide Canvas API functionality for other scripts.
 * @author james@richland.edu [James Jones]
+* @author drcalhoun
 * @license Copyright 2015 Standard ISC License
 * @OnlyCurrentDoc
 */
@@ -21,12 +22,15 @@ function checkApiSettings() {
     if (typeof profile === 'undefined') {
       var mesg = 'Unable to connect to ' + props.host;
       ui.alert('Failure', mesg, ui.ButtonSet.OK);
-      throw mesg;
+      throw new Error(mesg);
     }
     name = profile.name ? profile.name : 'Unknown User';
     ui.alert('Success!', 'Connected to ' + props.host + ' as ' + name + '\nYou may now use the API calls.', ui.ButtonSet.OK);
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') {
+      showError('API Check Error', e);
+    }
     return;
   }
   return name;
@@ -37,8 +41,8 @@ function checkApiSettings() {
 * This should be added to your menu
 */
 function configurationDialog() {
-  var html = HtmlService.createTemplateFromFile('canvasConfig').evaluate()
-  .setSandboxMode(HtmlService.SandboxMode.IFRAME);
+  // Removed the deprecated .setSandboxMode() method
+  var html = HtmlService.createTemplateFromFile('canvasConfig').evaluate();
   var props = SpreadsheetApp.getUi().showModalDialog(html, 'Canvas API Configuration');
   return;
 }
@@ -59,10 +63,9 @@ function processConfigurationForm(formObject) {
       userProperties.deleteProperty('host');
     }
   }
-  if (typeof token !== 'undefined' && token) {
-    userProperties.setProperty('token', token);
-  } else {
-    userProperties.deleteProperty('token');
+  // Trim the token and leave it blank to keep the existing one
+  if (typeof token !== 'undefined' && token && token.trim() !== '') {
+    userProperties.setProperty('token', token.trim());
   }
   checkApiSettings();
   return;
@@ -107,10 +110,13 @@ function determineCanvasHost(text) {
         'Error',
         'Sorry, I did not understand what you entered for the Canvas Hostname',
         ui.ButtonSet.OK);
-      throw ('Bad Hostname');
+      throw new Error('Bad Hostname');
     }
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') {
+      showError('Host Configuration Error', e);
+    }
     return;
   }
   return text;
@@ -118,11 +124,6 @@ function determineCanvasHost(text) {
 
 /**
 * @function This function fetches your Canvas instance and your access token.
-*           If you don't have them saved, it will prompt you for them. It uses
-*           Google's UserProperties() so it is specific to a user and a
-*           spreadsheet and sharing the spreadsheet with someone else should
-*           not transfer your credentials.
-* 
 */
 function getApiSettings() {
   var required_properties = [ 'host', 'token' ];
@@ -152,6 +153,9 @@ function getApiSettings() {
     }
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') {
+      showError('API Settings Error', e);
+    }
     return;
   }
   return properties;
@@ -167,9 +171,6 @@ function resetApiSettings() {
 
 /**
 * @function convert the parameters into a Query String
-* @param {Object}
-*          obj - the parameters to include
-* @returns {String} the query string
 */
 function makeQueryString(obj) {
   var q = [];
@@ -198,21 +199,7 @@ function makeQueryString(obj) {
 }
 
 /**
-* @function This function calls the CanvasAPI and returns any information as an
-*           object.
-* @param {string}
-*          endpoint - The endpoint from the Canvas API Documentation, including
-*          the GET, POST, PUT, or DELETE the /api/v1 version is optional and
-*          will add the value specified within the function as a default if not
-* @param {Object}
-*          [opts] - The parameters that need passed to the API call Variable
-*          substitution is done for values in the endpoint that begin with :
-*          SIS variables can be specified as ":sis_user_id: 123" rather than
-*          "user_id: ':sis_user_id:123'" Any other variables are added to the
-*          querystring for a GET or the payload for a PUT or POST
-* @param {Object[]}
-*          [filter] - An array containing values to return. This allows you to
-*          reduce storage by eliminating unnecessary objects
+* @function This function calls the CanvasAPI and returns any information as an object.
 */
 function canvasAPI(endpoint, opts, filter) {
   if (typeof endpoint === 'undefined') {
@@ -227,23 +214,26 @@ function canvasAPI(endpoint, opts, filter) {
   
   var endpointRegex = /^(GET|POST|PUT|DELETE|HEAD)\s+(.*)$/i;
   var tokenRegex = new RegExp('^:([a-z_]+)$');
-  var nextLinkRegex = new RegExp('<(.*?)>; rel="next"');
-  //  var integerRegex = new RegExp('^[0-9]+$');
   var data;
   
   try {
     var userProperties = getApiSettings();
     if (userProperties === false) {
-      throw 'You need to specify a full set of credentials.';
+      throw new Error('You need to specify a full set of credentials.');
     }
-    var parms = { 'headers' : { 'Authorization' : 'Bearer ' + userProperties.token }, };
+    
+    // Mute HTTP exceptions to properly handle non-200 responses
+    var parms = { 
+      'headers' : { 'Authorization' : 'Bearer ' + userProperties.token },
+      'muteHttpExceptions' : true
+    };
     
     if (typeof endpoint !== 'string') {
-      throw 'Endpoint specification must be a string. Received: ' + typeof endpoint;
+      throw new Error('Endpoint specification must be a string. Received: ' + typeof endpoint);
     }
     var endpointMatches = endpointRegex.exec(endpoint);
     if (endpointMatches === null) {
-      throw 'Invalid endpoint specified: ' + endpoint;
+      throw new Error('Invalid endpoint specified: ' + endpoint);
     }
     parms.method = endpointMatches[1].toLowerCase();
     var routes = endpointMatches[2].split('/');
@@ -259,7 +249,7 @@ function canvasAPI(endpoint, opts, filter) {
         var matches = tokenRegex.exec(routes[i]);
         if (matches !== null) {
           if (typeof opts !== 'object') {
-            throw 'Options is not an object but variable substitutions is needed';
+            throw new Error('Options is not an object but variable substitutions is needed');
           }
           var tokens = [ routes[i], matches[1], ':sis_' + matches[1],
               'sis_' + matches[1] ];
@@ -274,7 +264,7 @@ function canvasAPI(endpoint, opts, filter) {
             }
           }
           if (!tokenMatch) {
-            throw 'Unable to find substitution for :' + matches[1] + ' in ' + endpointMatches[2];
+            throw new Error('Unable to find substitution for :' + matches[1] + ' in ' + endpointMatches[2]);
           }
         } else {
           route.push(routes[i]);
@@ -306,58 +296,67 @@ function canvasAPI(endpoint, opts, filter) {
     while (url !== null) {
       var response = UrlFetchApp.fetch(url, parms);
       url = null;
-      if (response.getResponseCode() == 200) {
+      var code = response.getResponseCode();
+      
+      // Accept 201 Created and 204 No Content alongside 200 OK
+      if (code >= 200 && code < 300) {
         var headers = response.getAllHeaders();
         if (parms.method == 'get' && typeof headers.Link !== 'undefined') {
           var links = headers.Link.split(',');
           if (typeof links === 'object') {
             for (var l = 0; l < links.length; l++) {
-              var linkMatch = nextLinkRegex.exec(links[l]);
+              // Resilient pagination regex
+              var linkMatch = /<([^>]+)>;\s*rel=["']?next["']?/i.exec(links[l]);
               if (linkMatch !== null) {
                 url = linkMatch[1];
               }
             }
           }
         }
-        var json = JSON.parse(response.getContentText());
-        var key;
-        if (typeof json === 'object') {
-          if (Array.isArray(json)) {
-            for ( var item in json) {
-              if (json.hasOwnProperty(item)) {
-                var entry = json[item];
-                if (typeof filter !== 'undefined') {
-                  var row = {};
-                  for (j in filter) {
-                    if (filter.hasOwnProperty(j)) {
-                      key = filter[j];
-                      if (typeof entry[key] !== 'undefined') {
-                        if (Array.isArray(entry[key])) {
-                          row[key] = entry[key].slice(0);
-                        } else {
-                          row[key] = entry[key];
+        
+        // Ensure content exists (protects against 204 Empty Responses)
+        var content = response.getContentText();
+        if (content) {
+          var json = JSON.parse(content);
+          var key;
+          if (typeof json === 'object') {
+            if (Array.isArray(json)) {
+              for ( var item in json) {
+                if (json.hasOwnProperty(item)) {
+                  var entry = json[item];
+                  if (typeof filter !== 'undefined') {
+                    var row = {};
+                    for (j in filter) {
+                      if (filter.hasOwnProperty(j)) {
+                        key = filter[j];
+                        if (typeof entry[key] !== 'undefined') {
+                          if (Array.isArray(entry[key])) {
+                            row[key] = entry[key].slice(0);
+                          } else {
+                            row[key] = entry[key];
+                          }
                         }
                       }
                     }
+                    data.push(row);
+                  } else {
+                    data.push(entry);
                   }
-                  data.push(row);
-                } else {
-                  data.push(entry);
                 }
               }
-            }
-          } else {
-            if (typeof filter === 'undefined') {
-              data = json;
             } else {
-              for (j in filter) {
-                if (filter.hasOwnProperty(j)) {
-                  key = filter[j];
-                  if (typeof json[key] !== 'undefined') {
-                    if (Array.isArray(json[key])) {
-                      data[key] = json[key].slice(0);
-                    } else {
-                      data[key] = json[key];
+              if (typeof filter === 'undefined') {
+                data = json;
+              } else {
+                for (j in filter) {
+                  if (filter.hasOwnProperty(j)) {
+                    key = filter[j];
+                    if (typeof json[key] !== 'undefined') {
+                      if (Array.isArray(json[key])) {
+                        data[key] = json[key].slice(0);
+                      } else {
+                        data[key] = json[key];
+                      }
                     }
                   }
                 }
@@ -365,10 +364,33 @@ function canvasAPI(endpoint, opts, filter) {
             }
           }
         }
+      } else {
+        // Advanced Error Parsing: Extract clean message if Canvas sends JSON
+        var content = response.getContentText();
+        var cleanMessage = '';
+        try {
+          var errObj = JSON.parse(content);
+          if (errObj.errors) {
+            cleanMessage = errObj.errors.map(function(e){ return e.message; }).join('\n');
+          } else if (errObj.message) {
+             cleanMessage = errObj.message;
+          }
+        } catch(parseError) {
+           // Fallback if the response isn't JSON
+        }
+        
+        if (cleanMessage) {
+            throw new Error('Canvas API Error: ' + cleanMessage);
+        } else {
+            throw new Error('HTTP ' + code + '\n' + content);
+        }
       }
     }
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') {
+      showError('Canvas API Request Failed', e);
+    }
     return;
   }
   return data;

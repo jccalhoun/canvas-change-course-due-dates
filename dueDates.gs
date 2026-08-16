@@ -176,10 +176,11 @@ function getCourseId() {
     var userProperties = PropertiesService.getUserProperties();
     courseId = userProperties.getProperty('courseid');
     if (!courseId) {
-      throw 'You must specify a courseID through the Canvas menu before proceeding.';
+      throw new Error('You must specify a courseID through the Canvas menu before proceeding.');
     }
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') showError('Course ID Error', e);
     return;
   }
   return courseId;
@@ -194,7 +195,7 @@ function getDueDates(courseId) {
       courseId = getCourseId();
     }
     if (typeof courseId === 'undefined') {
-      throw 'You must specify a course ID before running this';
+      throw new Error('You must specify a course ID before running this');
     }
     var quizList = canvasAPI('GET /api/v1/courses/:course_id/quizzes', {
       ':course_id' : courseId
@@ -225,6 +226,7 @@ function getDueDates(courseId) {
     }
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') showError('Failed to Get Due Dates', e);
     return;
   }
   return data;
@@ -235,12 +237,12 @@ function getDataSheet(create) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (typeof ss === 'undefined') {
-      throw 'No active spreadsheet';
+      throw new Error('No active spreadsheet');
     }
     var userProperties = PropertiesService.getUserProperties();
     var courseId = userProperties.getProperty('courseid');
     if (!courseId) {
-      throw 'You must specify the course ID before you can change the dates.';
+      throw new Error('You must specify the course ID before you can change the dates.');
     }
     var dateSheetName = getConfig('sheetName');
     dsheet = ss.getSheetByName(dateSheetName);
@@ -249,7 +251,7 @@ function getDataSheet(create) {
       dsheet = ss.getSheetByName(dateSheetName);
     }
     if (dsheet == null) {
-      throw 'Unable to create "' + dateSheetName + '" sheet';
+      throw new Error('Unable to create "' + dateSheetName + '" sheet');
     }
     var headerInfo = getConfig('header');
     if (create) {
@@ -260,6 +262,7 @@ function getDataSheet(create) {
     }
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') showError('Spreadsheet Error', e);
     return;
   }
   return dsheet;
@@ -271,7 +274,7 @@ function listDueDates() {
     var existingData = getDueDates(courseId);
     var data = [];
     if (typeof existingData === 'undefined' || Object.keys(existingData).length == 0) {
-      throw 'No data returned. Cowardly refusing to do anything stupid.';
+      throw new Error('No data returned. Cowardly refusing to do anything stupid.');
     }
     var dsheet = getDataSheet(1);
     var hdrs = getHeaders();
@@ -294,10 +297,11 @@ function listDueDates() {
     if (dsheet.getMaxRows() > rows) {
       dsheet.deleteRows(rows + 1, dsheet.getMaxRows() - rows);
     }
-    // Uncomment this next line to automatically format the due dates.
+    // Automatically format the due dates.
     formatSpreadsheet(courseId);
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') showError('Failed to Load Due Dates', e);
     return;
   }
   return;
@@ -308,7 +312,7 @@ function formatSpreadsheet(courseId) {
     var datetimeFmt = 'yyyy-MM-dd hh:mm';
     var dsheet = getDataSheet();
     if (dsheet.getRange(1, 1).isBlank()) {
-      throw 'You have no data to process. Refusing to continue';
+      throw new Error('You have no data to process. Refusing to continue');
     }
     if (typeof courseId === 'undefined') {
       courseId = getCourseId();
@@ -384,6 +388,7 @@ function formatSpreadsheet(courseId) {
     } ]);
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') showError('Formatting Error', e);
     return;
   }
   return;
@@ -410,7 +415,7 @@ function formatDueDates(showTimes) {
   try {
     var dsheet = getDataSheet();
     if (dsheet.getRange(1, 1).isBlank()) {
-      throw 'You have no data to process. Refusing to continue';
+      throw new Error('You have no data to process. Refusing to continue');
     }
     dsheet.setActiveRange(dsheet.getRange(1, 1));
     var range = dsheet.getDataRange();
@@ -434,6 +439,13 @@ function formatDueDates(showTimes) {
               continue;
             }
             var value = rows[j][col - 1];
+            
+            // Defensively ensure the cell value is actually a Date object 
+            // before attempting to extract hours and minutes
+            if (Object.prototype.toString.call(value) !== '[object Date]') {
+              continue; 
+            }
+            
             var needsTime = false;
             hr = value.getHours();
             min = value.getMinutes();
@@ -458,6 +470,7 @@ function formatDueDates(showTimes) {
     }
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') showError('Format Due Dates Error', e);
     return;
   }
   return;
@@ -467,7 +480,7 @@ function setDueDates() {
   try {
     var courseId = getCourseId();
     if (!courseId) {
-      throw 'You must specify the course ID before you can change the dates.';
+      throw new Error('You must specify the course ID before you can change the dates.');
     }
     var dsheet = getDataSheet();
     dsheet.setActiveRange(dsheet.getRange(1, 1));
@@ -475,23 +488,26 @@ function setDueDates() {
     var rows = range.getValues();
     var hdrs = getHeaders(rows[0]);
     if (hdrs.id.c2 < 0) {
-      throw 'You do not have Canvas IDs in here and without those, I cannot do anything.';
+      throw new Error('You do not have Canvas IDs in here and without those, I cannot do anything.');
     }
     if (hdrs.type.c2 < 0) {
-      throw 'You do not have a column specifying whether this is a quiz or assignment. I need that to know how to process the information.';
+      throw new Error('You do not have a column specifying whether this is a quiz or assignment. I need that to know how to process the information.');
     }
+    
     var existingData = getDueDates(courseId);
     var changes = {};
+    var updateCount = 0; // Tracks successful API requests
+    
     for (var i = 1, rowCount = rows.length; i < rowCount; i++) {
       var row = rows[i];
       var canvasId = row[hdrs.id.c2];
       var type = row[hdrs.type.c2];
       if (type != 'Quiz' && type != 'Assignment') {
-        throw 'The type must be Quiz or Assignment in row ' + (i + 1);
+        throw new Error('The type must be Quiz or Assignment in row ' + (i + 1));
       }
       var itemKey = type.substr(0, 1).toLowerCase() + canvasId;
       if (typeof existingData[itemKey] === 'undefined') {
-        throw 'You are trying to replace a quiz/assignment that is not in the system. Look for Canvas Id: ' + canvasId + ' in row ' + (i + 1) + ' of the spreadsheet.';
+        throw new Error('You are trying to replace a quiz/assignment that is not in the system. Look for Canvas Id: ' + canvasId + ' in row ' + (i + 1) + ' of the spreadsheet.');
       }
       // We have a match, now it's time to look for any changes between the original and the new
       var existing = existingData[itemKey];
@@ -536,6 +552,7 @@ function setDueDates() {
         }
       }
     }
+    
     var item;
     var result;
     for ( var changeKey in changes) {
@@ -562,14 +579,23 @@ function setDueDates() {
             result = canvasAPI('PUT /api/v1/courses/:course_id/quizzes/:id', item);
             break;
         }
+        updateCount++;
       }
     }
+    
+    // Provide a confirmation to the user that the save was successful
+    SpreadsheetApp.getUi().alert(
+      'Success!', 
+      updateCount + ' Canvas item(s) successfully updated.', 
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
     return;
+    
   } catch (e) {
     Logger.log(e);
+    if (typeof showError === 'function') showError('Failed to Save Due Dates', e);
     return;
   }
-  return;
 }
 
 function secondResolution(a, b) {
@@ -580,7 +606,8 @@ function secondResolution(a, b) {
 }
 
 function helpDialog() {
-  var html = HtmlService.createTemplateFromFile('help').evaluate().setSandboxMode(HtmlService.SandboxMode.IFRAME);
+  // Removed the deprecated .setSandboxMode() method
+  var html = HtmlService.createTemplateFromFile('help').evaluate();
   var props = SpreadsheetApp.getUi().showModalDialog(html,'Course Due Dates');
   return;
 }

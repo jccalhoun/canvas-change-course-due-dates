@@ -39,9 +39,9 @@
         <strong><label for="canvas_token">Access Token</label></strong>:
         <input
         type="password" name="canvas_token" size="32"
-        placeholder="SUPER SECRET ACCESS TOKEN"
-        value="<?= typeof(properties.token) === 'undefined' ? '' : properties.token;
-        ?>" />
+        placeholder="Leave blank to keep existing token"
+        autocomplete="off"
+        value="" />
       </div>
       <div style="font-size: 80%; color: #666; margin-bottom: 0.5em;">
         If you don't have an access token, then please follow the
