@@ -180,8 +180,7 @@ function getCourseId() {
     }
   } catch (e) {
     Logger.log(e);
-    if (typeof showError === 'function') showError('Course ID Error', e);
-    return;
+    throw e; // Bubble to UI
   }
   return courseId;
 }
@@ -200,9 +199,20 @@ function getDueDates(courseId) {
     var quizList = canvasAPI('GET /api/v1/courses/:course_id/quizzes', {
       ':course_id' : courseId
     }, [ 'id', 'title', 'due_at', 'unlock_at', 'lock_at', 'show_correct_answers_at', 'hide_correct_answers_at', 'published', 'assignment_id' ]);
+	if (quizList && quizList.length > 0) {
+  Logger.log(JSON.stringify(quizList, null, 2));
+}
     var assignmentList = canvasAPI('GET /api/v1/courses/:course_id/assignments', {
       ':course_id' : courseId
     }, [ 'id', 'name', 'due_at', 'unlock_at', 'lock_at', 'published', 'points_possible' ]);
+	var assignmentById = {};
+
+if (typeof assignmentList !== 'undefined') {
+  for (var i = 0; i < assignmentList.length; i++) {
+    assignmentById[assignmentList[i].id] =
+      assignmentList[i];
+  }
+}
     if (typeof quizList !== 'undefined') {
       for (var i = 0; i < quizList.length; i++) {
         key = 'q' + quizList[i].id;
@@ -211,9 +221,30 @@ function getDueDates(courseId) {
           quizAssignments[quizAssignmentId] = quizList[i].id;
         }
         quizList[i].type = 'Quiz';
-        data[key] = quizList[i];
+
+if (
+  quizList[i].assignment_id &&
+  assignmentById[quizList[i].assignment_id]
+) {
+  quizList[i].points_possible =
+    assignmentById[
+      quizList[i].assignment_id
+    ].points_possible;
+}
+
+data[key] = quizList[i];
       }
     }
+    Logger.log(
+  'ASSIGNMENT SAMPLE:\n' +
+  JSON.stringify(
+    assignmentList[0],
+    null,
+    2
+  )
+);
+
+
     if (typeof assignmentList !== 'undefined') {
       for (var i = 0; i < assignmentList.length; i++) {
         var assignmentId = assignmentList[i].id;
@@ -226,8 +257,7 @@ function getDueDates(courseId) {
     }
   } catch (e) {
     Logger.log(e);
-    if (typeof showError === 'function') showError('Failed to Get Due Dates', e);
-    return;
+    throw e; // Bubble to UI
   }
   return data;
 }
@@ -262,8 +292,7 @@ function getDataSheet(create) {
     }
   } catch (e) {
     Logger.log(e);
-    if (typeof showError === 'function') showError('Spreadsheet Error', e);
-    return;
+    throw e; // Bubble to UI
   }
   return dsheet;
 }
@@ -388,8 +417,7 @@ function formatSpreadsheet(courseId) {
     } ]);
   } catch (e) {
     Logger.log(e);
-    if (typeof showError === 'function') showError('Formatting Error', e);
-    return;
+    throw e; // Bubble to UI
   }
   return;
 }
@@ -470,8 +498,7 @@ function formatDueDates(showTimes) {
     }
   } catch (e) {
     Logger.log(e);
-    if (typeof showError === 'function') showError('Format Due Dates Error', e);
-    return;
+    throw e; // Bubble to UI
   }
   return;
 }
@@ -555,6 +582,8 @@ function setDueDates() {
     
     var item;
     var result;
+    var failedItems = []; // Array to track items that fail to update
+
     for ( var changeKey in changes) {
       if (changes.hasOwnProperty(changeKey)) {
         var change = changes[changeKey];
@@ -571,24 +600,51 @@ function setDueDates() {
             item[prefixedKey] = change[key2];
           }
         }
-        switch (ltype) {
-          case 'a':
-            result = canvasAPI('PUT /api/v1/courses/:course_id/assignments/:id', item);
-            break;
-          case 'q':
-            result = canvasAPI('PUT /api/v1/courses/:course_id/quizzes/:id', item);
-            break;
+        
+        // Wrap the API call in a try/catch so one failure doesn't kill the batch
+        try {
+          switch (ltype) {
+            case 'a':
+              result = canvasAPI('PUT /api/v1/courses/:course_id/assignments/:id', item);
+              break;
+            case 'q':
+              result = canvasAPI('PUT /api/v1/courses/:course_id/quizzes/:id', item);
+              break;
+          }
+          updateCount++;
+        } catch (apiError) {
+          Logger.log('Failed to update Canvas ID ' + id + ': ' + apiError.toString());
+          failedItems.push(id);
         }
-        updateCount++;
       }
     }
     
-    // Provide a confirmation to the user that the save was successful
-    SpreadsheetApp.getUi().alert(
-      'Success!', 
-      updateCount + ' Canvas item(s) successfully updated.', 
-      SpreadsheetApp.getUi().ButtonSet.OK
-    );
+    // Provide a highly accurate summary to the user
+    if (updateCount === 0 && failedItems.length === 0) {
+      SpreadsheetApp.getUi().alert(
+        'No Changes Detected', 
+        'No due date changes were found to update.', 
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } else if (updateCount === 0 && failedItems.length > 0) {
+      SpreadsheetApp.getUi().alert(
+        'Update Failed', 
+        '0 Canvas items updated.\n\nThe following Canvas IDs failed and require manual review: ' + failedItems.join(', '), 
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } else if (failedItems.length > 0) {
+      SpreadsheetApp.getUi().alert(
+        'Partial Success', 
+        updateCount + ' Canvas item(s) successfully updated.\n\nHowever, the following Canvas IDs failed to update and require manual review: ' + failedItems.join(', '), 
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } else {
+      SpreadsheetApp.getUi().alert(
+        'Success!', 
+        updateCount + ' Canvas item(s) successfully updated.', 
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    }
     return;
     
   } catch (e) {

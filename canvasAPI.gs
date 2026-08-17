@@ -52,22 +52,35 @@ function configurationDialog() {
 * @param {Object}
 *          formObject - the data returned by the form submission
 */
+/**
+* @function Process the submission from the Configuration form
+*/
 function processConfigurationForm(formObject) {
-  var host = determineCanvasHost(formObject.canvas_host);
-  var token = formObject.canvas_token;
   var userProperties = PropertiesService.getUserProperties();
-  if (host !== false) {
-    if (host != '') {
-      userProperties.setProperty('host', host);
-    } else {
-      userProperties.deleteProperty('host');
-    }
-  }
-  // Trim the token and leave it blank to keep the existing one
+  var token = formObject.canvas_token;
+  
+  // 1. Save the token immediately so a bad host doesn't abort the save
   if (typeof token !== 'undefined' && token && token.trim() !== '') {
     userProperties.setProperty('token', token.trim());
   }
-  checkApiSettings();
+
+  // 2. Validate the host safely
+  try {
+    var host = determineCanvasHost(formObject.canvas_host);
+    if (host !== false) {
+      if (host != '') {
+        userProperties.setProperty('host', host);
+      } else {
+        userProperties.deleteProperty('host');
+      }
+    }
+    checkApiSettings();
+  } catch(e) {
+    Logger.log(e);
+    if (typeof showError === 'function') {
+      showError('Configuration Error', e);
+    }
+  }
   return;
 }
 
@@ -114,10 +127,7 @@ function determineCanvasHost(text) {
     }
   } catch (e) {
     Logger.log(e);
-    if (typeof showError === 'function') {
-      showError('Host Configuration Error', e);
-    }
-    return;
+    throw e; // Bubble to UI
   }
   return text;
 }
@@ -153,10 +163,7 @@ function getApiSettings() {
     }
   } catch (e) {
     Logger.log(e);
-    if (typeof showError === 'function') {
-      showError('API Settings Error', e);
-    }
-    return;
+    throw e; // Prevents the 'undefined === false' bug
   }
   return properties;
 }
@@ -388,10 +395,7 @@ function canvasAPI(endpoint, opts, filter) {
     }
   } catch (e) {
     Logger.log(e);
-    if (typeof showError === 'function') {
-      showError('Canvas API Request Failed', e);
-    }
-    return;
+    throw e; // Bubble the error up to the UI-level functions
   }
   return data;
 }

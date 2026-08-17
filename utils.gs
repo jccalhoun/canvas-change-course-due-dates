@@ -47,7 +47,7 @@ function fromIso8601(timestamp, asDateObject) {
 * @returns {String} ISO8601 timestamp
 */
 function toIso8601(datetime, daysEnd) {
-  if (typeof datetime == 'string') {
+  if (!(datetime instanceof Date)) {
     return '';
   }
   
@@ -83,9 +83,9 @@ function getCourseDialog() {
     var ui = SpreadsheetApp.getUi();
     var settings = getApiSettings();
     if (settings === false) {
-      ui.alert('API Settings not configured', 'You must configure your API settings before trying to specify the course');
-      return false;
-    }
+  configurationDialog();
+  return false;
+}
     var userProperties = PropertiesService.getUserProperties();
     var msg = 'Specify the Canvas Course ID for your course.\n\nYou may enter this as an integer or you may paste a URL from your course into the box.\nThe URL should look like this: https://' + settings.host + '/courses/123\n \n';
     var btnset = ui.ButtonSet.OK;
