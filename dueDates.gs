@@ -415,13 +415,19 @@ function formatSpreadsheet(courseId) {
 }
 
 function hideTimes() {
-  formatDueDates(false);
-  return;
+  try {
+    formatDueDates(false);
+  } catch (e) {
+    showError('Format Due Dates Error', e);
+  }
 }
 
 function showTimes() {
-  formatDueDates(true);
-  return;
+  try {
+    formatDueDates(true);
+  } catch (e) {
+    showError('Format Due Dates Error', e);
+  }
 }
 
 function formatDueDates(showTimes) {
