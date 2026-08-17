@@ -199,9 +199,7 @@ function getDueDates(courseId) {
     var quizList = canvasAPI('GET /api/v1/courses/:course_id/quizzes', {
       ':course_id' : courseId
     }, [ 'id', 'title', 'due_at', 'unlock_at', 'lock_at', 'show_correct_answers_at', 'hide_correct_answers_at', 'published', 'assignment_id' ]);
-	if (quizList && quizList.length > 0) {
-  Logger.log(JSON.stringify(quizList, null, 2));
-}
+	
     var assignmentList = canvasAPI('GET /api/v1/courses/:course_id/assignments', {
       ':course_id' : courseId
     }, [ 'id', 'name', 'due_at', 'unlock_at', 'lock_at', 'published', 'points_possible' ]);
@@ -232,17 +230,11 @@ if (
     ].points_possible;
 }
 
+
 data[key] = quizList[i];
       }
     }
-    Logger.log(
-  'ASSIGNMENT SAMPLE:\n' +
-  JSON.stringify(
-    assignmentList[0],
-    null,
-    2
-  )
-);
+    
 
 
     if (typeof assignmentList !== 'undefined') {
@@ -555,10 +547,25 @@ function setDueDates() {
           }
           var field = hdr.field;
           var code = itemKey;
+          // Points are displayed for reference only.
+// Canvas classic quiz point updates are not supported.
+if (field === 'points_possible') {
+  continue;
+}
+
           if (hdrs[hdr.key].location) {
-            if (type == 'Quiz' && hdrs[hdr.key].location == 'Assignment' && existingData[itemKey].assignment_id) {
-              code = existingData[itemKey].assignment_id;
-            }
+            if (
+    type == 'Quiz' &&
+    hdrs[hdr.key].location == 'Assignment' &&
+    existingData[itemKey].assignment_id
+) {
+
+    code =
+        'a' +
+        existingData[itemKey].assignment_id;
+
+    
+}
           }
           if (field == 'title' && type == 'Assignment') {
             field = 'name';
@@ -566,6 +573,7 @@ function setDueDates() {
           if (value == '' && (existing[field] == null || existing[field] == '')) {
             continue;
           }
+          
           if (value == existing[field]) {
             continue;
           }
@@ -576,6 +584,7 @@ function setDueDates() {
             changes[code] = {};
           }
           changes[code][field] = value;
+          
         }
       }
     }
@@ -605,7 +614,15 @@ function setDueDates() {
         try {
           switch (ltype) {
             case 'a':
-              result = canvasAPI('PUT /api/v1/courses/:course_id/assignments/:id', item);
+            
+              result = canvasAPI(
+    'PUT /api/v1/courses/:course_id/assignments/:id',
+    item
+);
+
+
+              
+              
               break;
             case 'q':
               result = canvasAPI('PUT /api/v1/courses/:course_id/quizzes/:id', item);
