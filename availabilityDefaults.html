@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style type="text/css">
+      body { font-family: Arial, serif; }
+      label { display: block; margin-top: 0.75em; font-weight: bold; }
+      input[type="number"] { width: 4em; padding: 0.2em; }
+      input[type="time"] { padding: 0.2em; }
+      .inline-group { display: flex; gap: 10px; align-items: center; margin-top: 0.2em; }
+    </style>
+  </head>
+  <body>
+    <p>Set defaults for Available From and Available Until based on each item's Due date. Leave a field blank to skip.</p>
+    <form id="defaultsForm">
+      <label>Available From</label>
+      <div class="inline-group">
+        <input type="number" id="from_offset" name="from_offset" value="<?= fromOffset ?>" placeholder="Days" />
+        <span>days before at</span>
+        <input type="time" id="from_time" name="from_time" value="<?= fromTime ?>" />
+      </div>
+
+      <label>Available Until</label>
+      <div class="inline-group">
+        <input type="number" id="until_offset" name="until_offset" value="<?= untilOffset ?>" placeholder="Days" />
+        <span>days after at</span>
+        <input type="time" id="until_time" name="until_time" value="<?= untilTime ?>" />
+      </div>
+
+      <div style="margin-top: 1.5em;">
+        <input type="checkbox" id="overwrite" name="overwrite" />
+        <label style="display:inline; font-weight:normal;" for="overwrite">
+          Overwrite existing values (default: only fill blanks)
+        </label>
+      </div>
+      <div style="margin-top: 1em;">
+        <input type="button" value="Submit" onclick="submitForm()" />
+        <input type="button" value="Cancel" onclick="google.script.host.close();" />
+      </div>
+    </form>
+    <script>
+      function submitForm() {
+        var fromOffset = document.getElementById('from_offset').value;
+        var untilOffset = document.getElementById('until_offset').value;
+        var fromTime = document.getElementById('from_time').value;
+        var untilTime = document.getElementById('until_time').value;
+        var overwrite = document.getElementById('overwrite').checked;
+        
+        google.script.run
+          .withSuccessHandler(function() { google.script.host.close(); })
+          .withFailureHandler(function(err) { alert('Error: ' + err.message); })
+          .processAvailabilityDefaultsForm({
+            from_offset: fromOffset,
+            until_offset: untilOffset,
+            from_time: fromTime,
+            until_time: untilTime,
+            overwrite: overwrite
+          });
+      }
+    </script>
+  </body>
+</html>

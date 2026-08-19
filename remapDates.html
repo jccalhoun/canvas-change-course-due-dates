@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style type="text/css">
+      body { font-family: Arial, serif; }
+      label { display: block; margin-top: 0.75em; font-weight: bold; }
+      input[type="datetime-local"] { padding: 0.2em; margin-top: 0.2em; width: 95%; box-sizing: border-box; }
+    </style>
+  </head>
+  <body>
+    <p>Pick the date and time everything is currently anchored to, and where it should move to.
+    Every Due, Available From, Available Until, and Show/Hide Answers value in the sheet
+    will shift by the exact same amount.</p>
+    <form id="remapForm">
+      <label for="old_date">Current anchor date & time</label>
+      <input type="datetime-local" id="old_date" name="old_date" required />
+      
+      <label for="new_date">New anchor date & time</label>
+      <input type="datetime-local" id="new_date" name="new_date" required />
+      
+      <div style="margin-top: 1em;">
+        <input type="button" value="Submit" onclick="submitForm()" />
+        <input type="button" value="Cancel" onclick="google.script.host.close();" />
+      </div>
+    </form>
+    <script>
+      function submitForm() {
+        var oldDate = document.getElementById('old_date').value;
+        var newDate = document.getElementById('new_date').value;
+        if (!oldDate || !newDate) {
+          alert('Please fill in both dates and times.');
+          return;
+        }
+        google.script.run
+          .withSuccessHandler(function() { google.script.host.close(); })
+          .withFailureHandler(function(err) { alert('Error: ' + err.message); })
+          .processRemapForm({ old_date: oldDate, new_date: newDate });
+      }
+    </script>
+  </body>
+</html>

@@ -3,6 +3,19 @@
 */
 
 /**
+* @function Display an error in the UI
+* @param {String} title - The title of the error dialog
+* @param {Error|String} err - The error object or message
+*/
+function showError(title, err) {
+  SpreadsheetApp.getUi().alert(
+    title, 
+    err.toString(), 
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+/**
 * @function Converts an ISO8601 timestamp into a Google time
 * @params {String} timestamp - ISO8601 timestamp from Canvas
 * @returns {String} Formatted Google date/time
@@ -33,27 +46,32 @@ function fromIso8601(timestamp, asDateObject) {
 * @param {Object} datetime - Date object 
 * @returns {String} ISO8601 timestamp
 */
-function toIso8601(datetime,daysEnd) {
-  var hr;
-  var min;
-  if (typeof datetime == 'string') {
+function toIso8601(datetime, daysEnd) {
+  if (!(datetime instanceof Date)) {
     return '';
   }
+  
+  // Clone the date object to prevent mutating the original in-memory array
+  var dt = new Date(datetime.getTime());
+  
+  var hr;
+  var min;
+  
   if (typeof daysEnd !== 'undefined' && daysEnd) {
-    hr = datetime.getHours();
-    min = datetime.getMinutes();
+    hr = dt.getHours();
+    min = dt.getMinutes();
     if (hr === 0 && min === 0) {
       hr = 23;
       min = 59;
     }
     if (min === 59) {
-      datetime.setHours(hr,min,59);
+      dt.setHours(hr, min, 59);
     }
     else {
-      datetime.setHours(hr,min,0);
+      dt.setHours(hr, min, 0);
     }
   }
-  return Utilities.formatDate(datetime, 'UTC', "yyyy-MM-dd'T'HH:mm:ss'Z'");
+  return Utilities.formatDate(dt, 'UTC', "yyyy-MM-dd'T'HH:mm:ss'Z'");
 }
 
 /**
@@ -65,9 +83,9 @@ function getCourseDialog() {
     var ui = SpreadsheetApp.getUi();
     var settings = getApiSettings();
     if (settings === false) {
-      ui.alert('API Settings not configured', 'You must configure your API settings before trying to specify the course');
-      return false;
-    }
+  configurationDialog();
+  return false;
+}
     var userProperties = PropertiesService.getUserProperties();
     var msg = 'Specify the Canvas Course ID for your course.\n\nYou may enter this as an integer or you may paste a URL from your course into the box.\nThe URL should look like this: https://' + settings.host + '/courses/123\n \n';
     var btnset = ui.ButtonSet.OK;
@@ -123,7 +141,11 @@ function getCourseDialog() {
       }
     }
   } catch(e) {
-    Logger.log(e)
+    Logger.log(e);
+    // Wire up the new UI alert helper
+    if (typeof showError === 'function') {
+      showError('Course Dialog Error', e);
+    }
     return;
   }
   return courseId;
