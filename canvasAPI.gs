@@ -206,6 +206,25 @@ function makeQueryString(obj) {
 }
 
 /**
+* @function Maps a Canvas API field name to a friendlier label for error messages.
+* @param {String} field - the raw field name from Canvas (e.g. "due_at")
+* @returns {String}
+*/
+function friendlyFieldName(field) {
+  var labels = {
+    'due_at': 'Due Date',
+    'unlock_at': 'Available From',
+    'lock_at': 'Available Until',
+    'points_possible': 'Points Possible',
+    'published': 'Published',
+    'show_correct_answers_at': 'Show Answers Date',
+    'hide_correct_answers_at': 'Hide Answers Date',
+    'invalid_record': 'Canvas Validation'
+  };
+  return labels[field] || field;
+}
+
+/**
 * @function This function calls the CanvasAPI and returns any information as an object.
 */
 function canvasAPI(endpoint, opts, filter) {
@@ -376,9 +395,37 @@ function canvasAPI(endpoint, opts, filter) {
         var content = response.getContentText();
         var cleanMessage = '';
         try {
-          var errObj = JSON.parse(content);
+                    var errObj = JSON.parse(content);
           if (errObj.errors) {
-            cleanMessage = errObj.errors.map(function(e){ return e.message; }).join('\n');
+            if (Array.isArray(errObj.errors)) {
+              // Form 1: errors is an array of { message: ... }
+              cleanMessage = errObj.errors.map(function(e){ return e.message; }).join('\n');
+            } else if (typeof errObj.errors === 'object') {
+              // Form 2: errors is an object keyed by field name, e.g.
+              // { "due_at": [ { attribute, message, type } ], "invalid_record": [ ... ] }
+              var fieldMessages = [];
+              for (var errField in errObj.errors) {
+                if (errObj.errors.hasOwnProperty(errField) && errField !== 'invalid_record') {
+                  var fieldErrors = errObj.errors[errField];
+                  if (Array.isArray(fieldErrors)) {
+                    for (var fe = 0; fe < fieldErrors.length; fe++) {
+                      var feMessage = fieldErrors[fe] && fieldErrors[fe].message ? fieldErrors[fe].message : JSON.stringify(fieldErrors[fe]);
+                      fieldMessages.push(friendlyFieldName(errField) + ': ' + feMessage);
+                    }
+                  }
+                }
+              }
+              // If every field was "invalid_record" (no more specific field errors found), fall back to it
+              if (fieldMessages.length === 0 && errObj.errors.invalid_record) {
+                var invalidRecord = errObj.errors.invalid_record;
+                if (Array.isArray(invalidRecord)) {
+                  for (var ir = 0; ir < invalidRecord.length; ir++) {
+                    fieldMessages.push(friendlyFieldName('invalid_record') + ': ' + (invalidRecord[ir] && invalidRecord[ir].message ? invalidRecord[ir].message : JSON.stringify(invalidRecord[ir])));
+                  }
+                }
+              }
+              cleanMessage = fieldMessages.join('\n');
+            }
           } else if (errObj.message) {
              cleanMessage = errObj.message;
           }

@@ -498,6 +498,22 @@ function formatDueDates(showTimes) {
   return;
 }
 
+/**
+* @function Formats the failedItems array (from setDueDates) into a readable,
+*           newline-separated list of "Name (Canvas ID: id) - reason" entries.
+* @param {Array} failedItems - array of { id, name, reason } objects
+* @returns {String}
+*/
+function formatFailedItems(failedItems) {
+  var lines = [];
+  for (var i = 0; i < failedItems.length; i++) {
+    var f = failedItems[i];
+    var label = f.name ? f.name + ' (Canvas ID: ' + f.id + ')' : 'Canvas ID: ' + f.id;
+    lines.push(label + '\nReason: ' + f.reason);
+  }
+  return lines.join('\n\n');
+}
+
 function setDueDates() {
   try {
     var courseId = getCourseId();
@@ -518,6 +534,7 @@ function setDueDates() {
     
     var existingData = getDueDates(courseId);
     var changes = {};
+    var itemNames = {}; // Maps a change's code (e.g. "a12345") to its assignment/quiz name
     var updateCount = 0; // Tracks successful API requests
     
     for (var i = 1, rowCount = rows.length; i < rowCount; i++) {
@@ -583,10 +600,15 @@ if (field === 'points_possible') {
           if (hdr.type === 'date' && secondResolution(value, existing[field])) {
             continue;
           }
-          if (typeof changes[code] === 'undefined') {
+                   if (typeof changes[code] === 'undefined') {
             changes[code] = {};
           }
           changes[code][field] = value;
+          
+          // Remember a human-readable name for this item so failures are easier to identify later.
+          if (typeof itemNames[code] === 'undefined') {
+            itemNames[code] = existing.name || existing.title || '';
+          }
           
         }
       }
@@ -594,7 +616,7 @@ if (field === 'points_possible') {
     
     var item;
     var result;
-    var failedItems = []; // Array to track items that fail to update
+    var failedItems = []; // Array to track items that fail to update, with name + reason
 
     for ( var changeKey in changes) {
       if (changes.hasOwnProperty(changeKey)) {
@@ -602,6 +624,7 @@ if (field === 'points_possible') {
         var ltype = changeKey.substr(0, 1);
         var prefix = ltype == 'q' ? 'quiz' : 'assignment';
         var id = changeKey.substr(1);
+        var itemName = itemNames[changeKey] || ('(' + (ltype == 'q' ? 'Quiz' : 'Assignment') + ' ' + id + ')');
         item = {
           ':course_id' : courseId,
           ':id' : id,
@@ -633,8 +656,9 @@ if (field === 'points_possible') {
           }
           updateCount++;
         } catch (apiError) {
-          Logger.log('Failed to update Canvas ID ' + id + ': ' + apiError.toString());
-          failedItems.push(id);
+          var reason = apiError && apiError.message ? apiError.message : apiError.toString();
+          Logger.log('Failed to update Canvas ID ' + id + ' (' + itemName + '): ' + reason);
+          failedItems.push({ id: id, name: itemName, reason: reason });
         }
       }
     }
@@ -649,13 +673,13 @@ if (field === 'points_possible') {
     } else if (updateCount === 0 && failedItems.length > 0) {
       SpreadsheetApp.getUi().alert(
         'Update Failed', 
-        '0 Canvas items updated.\n\nThe following Canvas IDs failed and require manual review: ' + failedItems.join(', '), 
+        '0 Canvas items updated.\n\nThe following items failed and require manual review:\n' + formatFailedItems(failedItems), 
         SpreadsheetApp.getUi().ButtonSet.OK
       );
     } else if (failedItems.length > 0) {
       SpreadsheetApp.getUi().alert(
         'Partial Success', 
-        updateCount + ' Canvas item(s) successfully updated.\n\nHowever, the following Canvas IDs failed to update and require manual review: ' + failedItems.join(', '), 
+        updateCount + ' Canvas item(s) successfully updated.\n\nHowever, the following items failed to update and require manual review:\n' + formatFailedItems(failedItems), 
         SpreadsheetApp.getUi().ButtonSet.OK
       );
     } else {
@@ -797,7 +821,7 @@ var response = ui.alert(
     range.setValues(rows);
     ui.alert(
       'Dates Shifted',
-      'Shifted by' + days + ' day(s) across ' + changed + ' date value(s).\n\n' +
+      'Shifted by ' + days + ' day(s) across ' + changed + ' date value(s).\n\n' +
       'Review the sheet, then choose Save Due Dates to push the changes to Canvas.',
       ui.ButtonSet.OK
     );
@@ -830,7 +854,7 @@ function processRemapForm(formObject) {
 function availabilityDefaultsDialog() {
   var userProperties = PropertiesService.getUserProperties();
   var template = HtmlService.createTemplateFromFile('availabilityDefaults');
-  template.fromOffset = userProperties.getProperty('availFromOffset') || '0';
+  template.fromOffset = userProperties.getProperty('availFromOffset') || '';
   template.fromTime = userProperties.getProperty('availFromTime') || '';
   template.untilOffset = userProperties.getProperty('availUntilOffset') || '';
   template.untilTime = userProperties.getProperty('availUntilTime') || '';
@@ -852,7 +876,7 @@ function processAvailabilityDefaultsForm(formObject) {
   if (fromOffset !== null && isNaN(fromOffset)) {
     throw new Error('Available From offset must be a number.');
   }
-  if (untilOffsetOffset < 0) {
+  if (untilOffset < 0) {
   throw new Error(
     'Available Until days must be positive.'
   );
