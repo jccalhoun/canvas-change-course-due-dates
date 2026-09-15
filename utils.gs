@@ -83,7 +83,6 @@ function getCourseDialog() {
     var ui = SpreadsheetApp.getUi();
     var settings = getApiSettings();
     if (settings === false) {
-  configurationDialog();
   return false;
 }
     var userProperties = PropertiesService.getUserProperties();
