@@ -200,11 +200,11 @@ function getDueDates(courseId) {
     }
     var quizList = canvasAPI('GET /api/v1/courses/:course_id/quizzes', {
       ':course_id' : courseId
-    }, [ 'id', 'title', 'due_at', 'unlock_at', 'lock_at', 'show_correct_answers_at', 'hide_correct_answers_at', 'published', 'assignment_id' ]);
+    }, [ 'id', 'title', 'due_at', 'unlock_at', 'lock_at', 'show_correct_answers_at', 'hide_correct_answers_at', 'show_correct_answers', 'published', 'assignment_id' ]);
 	
     var assignmentList = canvasAPI('GET /api/v1/courses/:course_id/assignments', {
       ':course_id' : courseId
-    }, [ 'id', 'name', 'due_at', 'unlock_at', 'lock_at', 'published', 'points_possible' ]);
+    }, [ 'id', 'name', 'due_at', 'unlock_at', 'lock_at', 'published', 'points_possible', 'has_overrides' ]);
 	var assignmentById = {};
 
 if (typeof assignmentList !== 'undefined') {
@@ -226,10 +226,8 @@ if (
   quizList[i].assignment_id &&
   assignmentById[quizList[i].assignment_id]
 ) {
-  quizList[i].points_possible =
-    assignmentById[
-      quizList[i].assignment_id
-    ].points_possible;
+  quizList[i].points_possible = assignmentById[quizList[i].assignment_id].points_possible;
+  quizList[i].has_overrides = assignmentById[quizList[i].assignment_id].has_overrides;
 }
 
 
@@ -370,7 +368,7 @@ function formatSpreadsheet(courseId) {
         validationRule = validationRule.build();
       }
     }
-    var booleanValidationRule = SpreadsheetApp.newDataValidation().requireValueInList([ '0', '1' ], false).setHelpText('1 = Yes, 0 = No').build();
+        var booleanValidationRule = SpreadsheetApp.newDataValidation().requireValueInList([ '0', '1' ], false).setAllowInvalid(false).setHelpText('1 = Yes, 0 = No').build();
     var typeValidationRule =
         SpreadsheetApp.newDataValidation().requireValueInList([ 'Assignment', 'Quiz' ], false).setAllowInvalid(false).setHelpText('Can be "Assignment" or "Quiz", but changing this will not work.')
     .build();
@@ -566,6 +564,9 @@ for (var i = 1, rowCount = rows.length; i < rowCount; i++) {
           if (hdr.c2 < 0 || hdr.required) {
             continue;
           }
+          if (hdr.location && hdr.location !== type) {
+            continue;
+          }
           var value = row[hdr.c2];
           switch (hdr.type) {
             case 'date':
@@ -575,11 +576,15 @@ for (var i = 1, rowCount = rows.length; i < rowCount; i++) {
               }
               value = toIso8601(value, hdr.daysEnd);
               break;
-            case 'boolean':
-              value = !(value == 0);
+                        case 'boolean':
+              if (value !== 0 && value !== 1 && value !== '0' && value !== '1') {
+                throw new Error('Row ' + (i + 1) + ', column "' + hdr.name + '": use 1 (yes) or 0 (no), not "' + value + '".');
+              }
+              value = (value == 1);
               break;
           }
           var field = hdr.field;
+		  
           var code = itemKey;
           
           if (field === 'points_possible') {
@@ -599,6 +604,9 @@ for (var i = 1, rowCount = rows.length; i < rowCount; i++) {
           if (hdr.type === 'date' && secondResolution(value, existing[field])) {
             continue;
           }
+		  if ((field === 'show_correct_answers_at' || field === 'hide_correct_answers_at') && value !== '' && existing.show_correct_answers === false) {
+            throw new Error('Row ' + (i + 1) + ', column "' + hdr.name + '": this quiz is set not to show correct answers, so Canvas will ignore this date. Clear the cell, or turn on showing correct answers for the quiz in Canvas first.');
+          }
           if (typeof changes[code] === 'undefined') {
             changes[code] = {};
           }
@@ -610,7 +618,25 @@ for (var i = 1, rowCount = rows.length; i < rowCount; i++) {
         }
       }
     }
-    
+    var overrideNames = [];
+    for (var ck in changes) {
+            if (changes.hasOwnProperty(ck) && existingData[ck] && existingData[ck].has_overrides &&
+          ('due_at' in changes[ck] || 'unlock_at' in changes[ck] || 'lock_at' in changes[ck])) {
+        overrideNames.push(itemNames[ck]);
+      }
+    }
+    if (overrideNames.length > 0) {
+      var ovUi = SpreadsheetApp.getUi();
+      var answer = ovUi.alert(
+        'Items With Section or Student Dates',
+        'These items have dates set for specific sections or students. Saving only changes the "Everyone" dates; the other dates stay as they are:\n\n' +
+        overrideNames.join('\n') + '\n\nSave anyway?',
+        ovUi.ButtonSet.YES_NO
+      );
+      if (answer !== ovUi.Button.YES) {
+        return;
+      }
+    }
     var item;
     var result;
     var failedItems = []; // Array to track items that fail to update, with name + reason
@@ -664,7 +690,7 @@ for (var i = 1, rowCount = rows.length; i < rowCount; i++) {
     if (updateCount === 0 && failedItems.length === 0) {
       SpreadsheetApp.getUi().alert(
         'No Changes Detected', 
-        'No due date changes were found to update.', 
+        'No changes were found to update.', 
         SpreadsheetApp.getUi().ButtonSet.OK
       );
     } else if (updateCount === 0 && failedItems.length > 0) {
@@ -699,7 +725,12 @@ function secondResolution(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') {
     return false;
   }
-  return (a.substr(0, 19) === b.substr(0, 19));
+  var ta = Date.parse(a);
+  var tb = Date.parse(b);
+  if (isNaN(ta) || isNaN(tb)) {
+    return false;
+  }
+  return Math.floor(ta / 1000) === Math.floor(tb / 1000);
 }
 
 function helpDialog() {

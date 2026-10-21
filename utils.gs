@@ -115,13 +115,13 @@ function getCourseDialog() {
     if (savedCourseId) {
       savedCourseId = savedCourseId.trim();
       if (/^[0-9]+$/.test(savedCourseId)) {
-        var savedCourse;
-        // Safely attempt to fetch the saved course. 
-        // If it was reset/deleted in Canvas, catch the 404 so the script doesn't crash.
+                var savedCourse;
+        // If the saved course can't be fetched, just don't offer it.
+        // Leave the saved ID alone so a bad token or network error doesn't erase it.
         try {
           savedCourse = canvasAPI('GET /api/v1/courses/' + savedCourseId );
         } catch (oldCourseError) {
-          userProperties.deleteProperty('courseid');
+          Logger.log(oldCourseError);
         }
         
         if (typeof savedCourse !== 'undefined') {

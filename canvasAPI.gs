@@ -173,7 +173,8 @@ function getApiSettings() {
 */
 function resetApiSettings() {
   var userProperties = PropertiesService.getUserProperties();
-  userProperties.deleteAllProperties();
+  userProperties.deleteProperty('host');
+  userProperties.deleteProperty('token');
 }
 
 /**
