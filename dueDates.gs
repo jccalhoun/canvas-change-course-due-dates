@@ -123,7 +123,6 @@ function getHeaders(list) {
 function getCourseDlg() {
   var courseId = getCourseDialog();
   if (courseId) {
-    getDataSheet(true);
     listDueDates();
   }
   return;
@@ -294,6 +293,7 @@ function getDataSheet(create) {
 
 function listDueDates() {
   try {
+    assertTimeZonesMatch();
     var courseId = getCourseId();
     var existingData = getDueDates(courseId);
     var data = [];
@@ -333,6 +333,7 @@ function listDueDates() {
 
 function formatSpreadsheet(courseId) {
   try {
+    assertTimeZonesMatch();
     var datetimeFmt = 'yyyy-MM-dd hh:mm';
     var dsheet = getDataSheet();
     if (dsheet.getRange(1, 1).isBlank()) {
@@ -366,7 +367,7 @@ function formatSpreadsheet(courseId) {
           validationRule.requireDate();
         }
         validationRule.setHelpText(helpText + '.');
-        validationRule.build();
+        validationRule = validationRule.build();
       }
     }
     var booleanValidationRule = SpreadsheetApp.newDataValidation().requireValueInList([ '0', '1' ], false).setHelpText('1 = Yes, 0 = No').build();
@@ -442,6 +443,7 @@ function formatDueDates(showTimes) {
   var hr;
   var min;
   try {
+    assertTimeZonesMatch();
     var dsheet = getDataSheet();
     if (dsheet.getRange(1, 1).isBlank()) {
       throw new Error('You have no data to process. Refusing to continue');
@@ -522,6 +524,7 @@ function formatFailedItems(failedItems) {
 
 function setDueDates() {
   try {
+    assertTimeZonesMatch();
     var courseId = getCourseId();
     if (!courseId) {
       throw new Error('You must specify the course ID before you can change the dates.');
@@ -543,8 +546,10 @@ function setDueDates() {
     var itemNames = {}; // Maps a change's code (e.g. "a12345") to its assignment/quiz name
     var updateCount = 0; // Tracks successful API requests
     
-    for (var i = 1, rowCount = rows.length; i < rowCount; i++) {
+for (var i = 1, rowCount = rows.length; i < rowCount; i++) {
       var row = rows[i];
+      if (row.join('') === '') { continue; } // Skip completely empty rows
+      
       var canvasId = row[hdrs.id.c2];
       var type = row[hdrs.type.c2];
       if (type != 'Quiz' && type != 'Assignment') {
@@ -554,7 +559,6 @@ function setDueDates() {
       if (typeof existingData[itemKey] === 'undefined') {
         throw new Error('You are trying to replace a quiz/assignment that is not in the system. Look for Canvas Id: ' + canvasId + ' in row ' + (i + 1) + ' of the spreadsheet.');
       }
-      // We have a match, now it's time to look for any changes between the original and the new
       var existing = existingData[itemKey];
       for ( var key in hdrs) {
         if (hdrs.hasOwnProperty(key)) {
@@ -565,6 +569,10 @@ function setDueDates() {
           var value = row[hdr.c2];
           switch (hdr.type) {
             case 'date':
+              if (value !== '' && !(value instanceof Date)) {
+                throw new Error('Row ' + (i + 1) + ', column "' + hdr.name + '": "' + value +
+                  '" is not a date Sheets recognizes. Fix it or clear the cell before saving.');
+              }
               value = toIso8601(value, hdr.daysEnd);
               break;
             case 'boolean':
@@ -573,26 +581,11 @@ function setDueDates() {
           }
           var field = hdr.field;
           var code = itemKey;
-          // Points are displayed for reference only.
-// Canvas classic quiz point updates are not supported.
-if (field === 'points_possible') {
-  continue;
-}
-
-          if (hdrs[hdr.key].location) {
-            if (
-    type == 'Quiz' &&
-    hdrs[hdr.key].location == 'Assignment' &&
-    existingData[itemKey].assignment_id
-) {
-
-    code =
-        'a' +
-        existingData[itemKey].assignment_id;
-
-    
-}
+          
+          if (field === 'points_possible') {
+            continue;
           }
+
           if (field == 'title' && type == 'Assignment') {
             field = 'name';
           }
@@ -606,16 +599,14 @@ if (field === 'points_possible') {
           if (hdr.type === 'date' && secondResolution(value, existing[field])) {
             continue;
           }
-                   if (typeof changes[code] === 'undefined') {
+          if (typeof changes[code] === 'undefined') {
             changes[code] = {};
           }
           changes[code][field] = value;
           
-          // Remember a human-readable name for this item so failures are easier to identify later.
           if (typeof itemNames[code] === 'undefined') {
             itemNames[code] = existing.name || existing.title || '';
           }
-          
         }
       }
     }
@@ -748,6 +739,7 @@ function shiftAllDatesDialog() {
 
 function shiftAllDates(days) {
   try {
+    assertTimeZonesMatch();
     var dsheet = getDataSheet();
     if (dsheet.getRange(1, 1).isBlank()) {
       throw new Error('No data to process. Load due dates first.');
@@ -768,7 +760,6 @@ function shiftAllDates(days) {
       throw new Error('No date columns found in the sheet.');
     }
     
-    var msInDay = 24 * 60 * 60 * 1000;
     var changed = 0;
     
     // Step 1: Count how many date values will be shifted
@@ -795,30 +786,28 @@ function shiftAllDates(days) {
     var ui = SpreadsheetApp.getUi();
 
     // Step 2: Ask for confirmation BEFORE modifying the array
-   
-
-var displayDays = Number(Math.abs(days).toFixed(2));
-var direction = days >= 0 ? 'later' : 'earlier';
-var response = ui.alert(
-  'Confirm Date Shift',
-  'You are about to shift ' + changed + ' date value(s) ' + displayDays + ' day(s) ' + direction + '.\n\n' +
-  'This will modify the spreadsheet immediately.\n' +
-  'You can still review the changes before saving them to Canvas.\n\n' +
-  'Continue?',
-  ui.ButtonSet.YES_NO
-);
+    var displayDays = Number(Math.abs(days).toFixed(2));
+    var direction = days >= 0 ? 'later' : 'earlier';
+    var response = ui.alert(
+      'Confirm Date Shift',
+      'You are about to shift ' + changed + ' date value(s) ' + displayDays + ' day(s) ' + direction + '.\n\n' +
+      'This will modify the spreadsheet immediately.\n' +
+      'You can still review the changes before saving them to Canvas.\n\n' +
+      'Continue?',
+      ui.ButtonSet.YES_NO
+    );
 
     if (response !== ui.Button.YES) {
       return;
     }
     
-    // Step 3: The user confirmed. Perform the math and update the array.
+    // Step 3: The user confirmed. Perform the math using the DST-safe helper.
     for (var j = 1; j <= rowCount; j++) {
       for (var d = 0; d < dateCols.length; d++) {
         var execCol = dateCols[d];
         var execVal = rows[j][execCol];
         if (Object.prototype.toString.call(execVal) === '[object Date]') {
-          rows[j][execCol] = new Date(execVal.getTime() + days * msInDay);
+          rows[j][execCol] = addDays(execVal, days);
         }
       }
     }
@@ -844,17 +833,18 @@ function remapDateRangeDialog() {
   SpreadsheetApp.getUi().showModalDialog(html, 'Remap Date Range');
 }
 
-function processRemapForm(formObject) {
-  // Parse the native datetime-local string directly
-  var oldDate = new Date(formObject.old_date);
-  var newDate = new Date(formObject.new_date);
-  if (isNaN(oldDate) || isNaN(newDate)) {
-    throw new Error('Could not understand one of the dates entered.');
+function wallClockMs(s) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(s || '');
+  if (!m) {
+    throw new Error('Could not understand the date "' + s + '".');
   }
-  var msInDay = 24 * 60 * 60 * 1000;
-  // Use precise decimal days to allow hour/minute shifting (Do not round)
-  var deltaDays = (newDate.getTime() - oldDate.getTime()) / msInDay;
-  shiftAllDates(deltaDays);
+  return Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5]);
+}
+
+function processRemapForm(formObject) {
+  var oldMs = wallClockMs(formObject.old_date);
+  var newMs = wallClockMs(formObject.new_date);
+  shiftAllDates((newMs - oldMs) / (24 * 60 * 60 * 1000));
 }
 
 function availabilityDefaultsDialog() {
@@ -874,26 +864,27 @@ function processAvailabilityDefaultsForm(formObject) {
   var untilOffset = formObject.until_offset === '' ? null : Number(formObject.until_offset);
   var fromTime = formObject.from_time;
   var untilTime = formObject.until_time;
+  
   if (fromOffset < 0) {
-  throw new Error(
-    'Available From days must be positive.'
-  );
-}
+    throw new Error('Available From days must be non-negative (0 or greater).');
+  }
   if (fromOffset !== null && isNaN(fromOffset)) {
     throw new Error('Available From offset must be a number.');
   }
   if (untilOffset < 0) {
-  throw new Error(
-    'Available Until days must be positive.'
-  );
-}
+    throw new Error('Available Until days must be non-negative (0 or greater).');
+  }
   if (untilOffset !== null && isNaN(untilOffset)) {
     throw new Error('Available Until offset must be a number.');
   }
   
   var userProperties = PropertiesService.getUserProperties();
   if (fromOffset !== null) userProperties.setProperty('availFromOffset', String(fromOffset));
+  else userProperties.deleteProperty('availFromOffset');
+  
   if (untilOffset !== null) userProperties.setProperty('availUntilOffset', String(untilOffset));
+  else userProperties.deleteProperty('availUntilOffset');
+  
   userProperties.setProperty('availFromTime', fromTime);
   userProperties.setProperty('availUntilTime', untilTime);
   
@@ -903,6 +894,7 @@ function processAvailabilityDefaultsForm(formObject) {
 
 function applyAvailabilityDefaults(fromOffsetDays, fromTime, untilOffsetDays, untilTime, overwrite) {
   try {
+    assertTimeZonesMatch();
     var dsheet = getDataSheet();
     if (dsheet.getRange(1, 1).isBlank()) {
       throw new Error('No data to process. Load due dates first.');
@@ -914,7 +906,6 @@ function applyAvailabilityDefaults(fromOffsetDays, fromTime, untilOffsetDays, un
     if (hdrs.due.c2 < 0) {
       throw new Error('No Due column found in the sheet.');
     }
-    var msInDay = 24 * 60 * 60 * 1000;
     var filledFrom = 0;
     var filledUntil = 0;
     
@@ -929,7 +920,7 @@ function applyAvailabilityDefaults(fromOffsetDays, fromTime, untilOffsetDays, un
         var curFrom = rows[i][hdrs.unlock.c2];
         var isBlankFrom = Object.prototype.toString.call(curFrom) !== '[object Date]';
         if (overwrite || isBlankFrom) {
-          var newFrom = new Date(dueVal.getTime() - (fromOffsetDays * msInDay));
+          var newFrom = addDays(dueVal, -fromOffsetDays);
           if (fromTime) {
             var fParts = fromTime.split(':');
             newFrom.setHours(parseInt(fParts[0], 10), parseInt(fParts[1], 10), 0, 0);
@@ -944,7 +935,7 @@ function applyAvailabilityDefaults(fromOffsetDays, fromTime, untilOffsetDays, un
         var curUntil = rows[i][hdrs.lock.c2];
         var isBlankUntil = Object.prototype.toString.call(curUntil) !== '[object Date]';
         if (overwrite || isBlankUntil) {
-          var newUntil = new Date(dueVal.getTime() + (untilOffsetDays * msInDay));
+          var newUntil = addDays(dueVal, untilOffsetDays);
           if (untilTime) {
             var uParts = untilTime.split(':');
             newUntil.setHours(parseInt(uParts[0], 10), parseInt(uParts[1], 10), 0, 0);

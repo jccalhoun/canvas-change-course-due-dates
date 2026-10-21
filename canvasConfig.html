@@ -38,7 +38,7 @@
       <div style="margin-top: 0.5em;">
         <strong><label for="canvas_token">Access Token</label></strong>:
         <input
-        type="password" name="canvas_token" size="32"
+        type="password" id="canvas_token" name="canvas_token" size="32"
         placeholder="Leave blank to keep existing token"
         autocomplete="off"
         value="" />
@@ -50,7 +50,7 @@
         obtain an API access token for an account?</a>
       </div>
       <input type="button" value="Submit"
-      onclick="google.script.run.processConfigurationForm(this.parentNode); google.script.host.close()" />
+      onclick="google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){alert('Error: ' + e.message);}).processConfigurationForm(this.parentNode);" />
       <input type="button" value="Cancel" onclick="google.script.host.close();" />
     </form>
   </body>

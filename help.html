@@ -19,7 +19,7 @@
         Choose <strong>Specify Course</strong> and put in the Canvas
         Course ID for the course to analyze. 
         This will automatically run <strong>Load Due Dates</strong> so
-        you can skip the next stop.
+        you can skip the next step.
       </li>
       <li>
         Choose <strong>Load Due Dates</strong> to download all of the
@@ -34,9 +34,22 @@
         Canvas.
       </li>
     </ol>
+
+    <h2>Mass Editing Tools</h2>
+    <p>
+      The <strong>Shift All Dates...</strong> menu item allows you to push all Due, Available From, Available Until, and Show/Hide dates forward or backward by a specific number of days.
+    </p>
+    <p>
+      The <strong>Remap Date Range...</strong> menu item allows you to pick a date your schedule is currently anchored to and the date it should move to. The entire sheet will shift perfectly to match the new timeline.
+    </p>
+    <p>
+      The <strong>Apply Availability Rules...</strong> menu item automatically populates "Available From" and "Available Until" dates based on each assignment's Due date (e.g., automatically unlock everything 7 days before it is due).
+    </p>
+
+    <h2>Display Settings</h2>
     <p>
       If your times aren't correct, it may be a timezone issue. The spreadsheet's timezone settings are found
-      under the <strong>File > Spreadsheet Settings</strong> menu item and should be set before you download the due dates.
+      under the <strong>File > Settings</strong> menu item and should be set to match your local timezone before you download the due dates.
     </p>
     <p>
       The <strong>Hide Times</strong> menu item will hide the times, leaving just the dates, for any
@@ -48,15 +61,15 @@
       The <strong>Show Times</strong> menu item will show the time for all dates. This will allow you to
       confirm the times. It will also allow you to do a find and replace on the times.
     </p>
-    <p>Points Column</p>
 
-<p><strong>Point values are shown for reference only.</strong></p>
+    <h3>Points Column</h3>
+    <p><strong>Point values are shown for reference only.</strong></p>
+    <p>Due to Canvas Classic Quiz limitations, changes made to the Points column are not saved back to Canvas. All other supported fields (Due Date, Available From, Available Until, Published, Show Answers, Hide Answers) continue to function normally.</p>
 
-<p>Due to Canvas Classic Quiz limitations, changes made to the Points column are not saved back to Canvas. All other supported fields (Due Date, Available From, Available Until, Published, Show Answers, Hide Answers) continue to function normally.</p>
     <h2>Additional Information</h2>
     <p>
       For more information, visit the <a href="https://github.com/jamesjonesmath/canvancement/tree/master/google-sheets/due-dates">Canvancement</a>
-      website or the <a href="https://community.canvaslms.com/docs/DOC-6739">Canvas Community</a>.
+      website.
     </p>
   </body>
 </html>

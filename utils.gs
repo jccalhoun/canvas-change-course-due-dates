@@ -1,6 +1,30 @@
 /**
 * @OnlyCurrentDoc
 */
+var _cachedTz = null;
+
+function assertTimeZonesMatch() {
+  var sheetTz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+  var scriptTz = Session.getScriptTimeZone();
+  if (sheetTz !== scriptTz) {
+    throw new Error('Time zone mismatch: the spreadsheet uses ' + sheetTz + 
+      ' but the script uses ' + scriptTz + 
+      '. Make them match (File > Settings, or appsscript.json) before working with dates.');
+  }
+}
+
+/**
+* @function Add days by calendar date so wall-clock times survive DST changes.
+*           Fractional days are added as exact time after the whole days.
+*/
+function addDays(date, days) {
+  var wholeDays = days < 0 ? Math.ceil(days) : Math.floor(days);
+  var remainderMs = Math.round((days - wholeDays) * 86400000 / 60000) * 60000;
+  var d = new Date(date.getTime());
+  d.setDate(d.getDate() + wholeDays);
+  d.setTime(d.getTime() + remainderMs);
+  return d;
+}
 
 /**
 * @function Display an error in the UI
@@ -33,12 +57,11 @@ function fromIso8601(timestamp, asDateObject) {
   if (typeof asDateObject !== 'undefined' && asDateObject) {
     return dt;
   }
-  var tz;
-  if (!tz) {
+  if (!_cachedTz) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    tz = ss.getSpreadsheetTimeZone();
+    _cachedTz = ss.getSpreadsheetTimeZone();
   }
-  return Utilities.formatDate(dt, tz, 'yyyy-MM-dd HH:mm:ss');
+  return Utilities.formatDate(dt, _cachedTz, 'yyyy-MM-dd HH:mm:ss');
 }
 
 /**
@@ -83,8 +106,8 @@ function getCourseDialog() {
     var ui = SpreadsheetApp.getUi();
     var settings = getApiSettings();
     if (settings === false) {
-  return false;
-}
+      return false;
+    }
     var userProperties = PropertiesService.getUserProperties();
     var msg = 'Specify the Canvas Course ID for your course.\n\nYou may enter this as an integer or you may paste a URL from your course into the box.\nThe URL should look like this: https://' + settings.host + '/courses/123\n \n';
     var btnset = ui.ButtonSet.OK;
@@ -124,21 +147,18 @@ function getCourseDialog() {
       }
       if (typeof courseId !== 'undefined' && courseId) {
         var course;
-        if (typeof savedCourseId !== 'undefined' && courseId == savedCourseId) {
+        // Fix: Ensure we actually successfully fetched the savedCourse before reusing it!
+        if (savedCourse && courseId == savedCourseId) {
           course = savedCourse;
-        }
-        else {
+        } else {
           course = canvasAPI('GET /api/v1/courses/' + courseId );
         }
-        if (typeof course !== 'undefined') {
-          var proceed = ui.alert(course.name,'Course ID : ' + course.id + '\nCourse name: ' + course.name + '\n\nWould you like to proceed?',ui.ButtonSet.YES_NO);
-          if (proceed == ui.Button.YES) {
-            userProperties.setProperty('courseid', courseId);
-            userProperties.setProperty('coursename', course.name);
-          }
-        }
-        else {
-          ui.alert('Unknown Course','Your input looks like it should be a course, but Canvas does not return any information about it.',ui.ButtonSet.OK);
+        // Because canvasAPI throws on error, if we reach this line, course is definitely valid.
+        var proceed = ui.alert(course.name,'Course ID : ' + course.id + '\nCourse name: ' + course.name + '\n\nWould you like to proceed?',ui.ButtonSet.YES_NO);
+        if (proceed == ui.Button.YES) {
+          userProperties.setProperty('courseid', courseId);
+          userProperties.setProperty('coursename', course.name);
+        } else {
           courseId = null;
         }
       }
@@ -149,7 +169,6 @@ function getCourseDialog() {
     }
   } catch(e) {
     Logger.log(e);
-    // Wire up the new UI alert helper
     if (typeof showError === 'function') {
       showError('Course Dialog Error', e);
     }

@@ -270,7 +270,7 @@ function canvasAPI(endpoint, opts, filter) {
         if (route.length == 0 && routes[i] != 'api') {
           route.push('api');
           route.push('v' + API_VERSION);
-          i++;
+          // Removed i++
         }
         var matches = tokenRegex.exec(routes[i]);
         if (matches !== null) {
