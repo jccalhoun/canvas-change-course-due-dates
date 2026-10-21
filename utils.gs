@@ -92,7 +92,15 @@ function getCourseDialog() {
     if (savedCourseId) {
       savedCourseId = savedCourseId.trim();
       if (/^[0-9]+$/.test(savedCourseId)) {
-        var savedCourse = canvasAPI('GET /api/v1/courses/' + savedCourseId );
+        var savedCourse;
+        // Safely attempt to fetch the saved course. 
+        // If it was reset/deleted in Canvas, catch the 404 so the script doesn't crash.
+        try {
+          savedCourse = canvasAPI('GET /api/v1/courses/' + savedCourseId );
+        } catch (oldCourseError) {
+          userProperties.deleteProperty('courseid');
+        }
+        
         if (typeof savedCourse !== 'undefined') {
           msg += 'Press Cancel to keep the current information.\nCourse ID : ' + savedCourse.id + '\nCourse name: ' + savedCourse.name + '\n \n';
           btnset = ui.ButtonSet.OK_CANCEL;
